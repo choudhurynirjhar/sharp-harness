@@ -1,5 +1,7 @@
 using AgentHarness.Ollama;
 using AgentHarness.Tools;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentHarness.Agent;
 
@@ -8,32 +10,65 @@ public sealed class AgentLoop
     private const int MaxSteps = 10;
     private readonly OllamaChatService _ollamaChatService;
     private readonly ToolRegistry _toolRegistry;
+    private readonly ILogger<AgentLoop> _logger;
 
-    public AgentLoop(OllamaChatService ollamaChatService, ToolRegistry toolRegistry)
+    public AgentLoop(
+        OllamaChatService ollamaChatService,
+        ToolRegistry toolRegistry,
+        ILogger<AgentLoop>? logger = null)
     {
         _ollamaChatService = ollamaChatService;
         _toolRegistry = toolRegistry;
+        _logger = logger ?? NullLogger<AgentLoop>.Instance;
     }
 
-    public async Task<string> RunAsync(string userMessage, CancellationToken cancellationToken)
+    public async Task<AgentRunResult> RunAsync(string userMessage, CancellationToken cancellationToken)
     {
+        var startedAt = DateTimeOffset.UtcNow;
+        _logger.LogInformation("Starting agent loop for user message with length {MessageLength}.", userMessage.Length);
+
         var messages = new List<OllamaMessage> { new("user", userMessage) };
         var tools = _toolRegistry.GetToolDefinitions();
+        var totalPromptTokens = 0;
+        var totalCompletionTokens = 0;
 
         for (var step = 0; step < MaxSteps; step++)
         {
+            _logger.LogInformation("Agent loop step {Step} started.", step + 1);
+
             var response = await _ollamaChatService.ChatAsync(messages, tools, cancellationToken);
             messages.Add(response.AssistantMessage);
 
+            if (response.Usage is not null)
+            {
+                totalPromptTokens += response.Usage.PromptEvalCount ?? 0;
+                totalCompletionTokens += response.Usage.EvalCount ?? 0;
+            }
+
             if (response.ToolCalls.Count == 0)
             {
-                return response.Text ?? string.Empty;
+                var duration = DateTimeOffset.UtcNow - startedAt;
+                _logger.LogInformation(
+                    "Agent loop completed at step {Step}. TotalPromptTokens={TotalPromptTokens} TotalCompletionTokens={TotalCompletionTokens} TotalTokens={TotalTokens}",
+                    step + 1,
+                    totalPromptTokens,
+                    totalCompletionTokens,
+                    totalPromptTokens + totalCompletionTokens);
+
+                return new AgentRunResult(
+                    response.Text ?? string.Empty,
+                    step + 1,
+                    totalPromptTokens,
+                    totalCompletionTokens,
+                    duration);
             }
 
             foreach (var call in response.ToolCalls)
             {
+                _logger.LogInformation("Executing tool {ToolName}.", call.Name);
                 var toolResult = await _toolRegistry.InvokeAsync(call.Name, call.Arguments, cancellationToken);
                 messages.Add(new OllamaMessage("tool", toolResult, call.Name));
+                _logger.LogInformation("Tool {ToolName} completed with result length {ResultLength}.", call.Name, toolResult.Length);
             }
         }
 

@@ -1,19 +1,35 @@
 ﻿using System.Threading.Channels;
 using AgentHarness.Agent;
+using AgentHarness.Evaluation;
 using AgentHarness.Messaging;
 using AgentHarness.Ollama;
 using AgentHarness.Tools;
 using AgentRuntime = AgentHarness.Agent.AgentHarness;
+using Microsoft.Extensions.Logging;
 
 var baseUrl = Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://localhost:11434";
 var model = Environment.GetEnvironmentVariable("OLLAMA_MODEL") ?? "qwen3.5:9b";
 
+using var loggerFactory = LoggerFactory.Create(builder =>
+{
+    builder.AddConsole();
+    builder.SetMinimumLevel(LogLevel.Information);
+});
+
+var evaluationLogger = new AgentEvaluationLogger(loggerFactory.CreateLogger<AgentEvaluationLogger>());
+
 var toolRegistry = new ToolRegistry([new GetCurrentTimeTool(), new HttpRequestTool()]);
-var ollamaChatService = new OllamaChatService(baseUrl, model);
-var agentLoop = new AgentLoop(ollamaChatService, toolRegistry);
+var ollamaChatService = new OllamaChatService(
+    baseUrl,
+    model,
+    loggerFactory.CreateLogger<OllamaChatService>());
+var agentLoop = new AgentLoop(
+    ollamaChatService,
+    toolRegistry,
+    loggerFactory.CreateLogger<AgentLoop>());
 
 var channel = Channel.CreateUnbounded<AgentRequest>();
-var harness = new AgentRuntime(agentLoop, channel.Reader);
+var harness = new AgentRuntime(agentLoop, channel.Reader, evaluationLogger);
 using var cts = new CancellationTokenSource();
 
 var runTask = Task.Run(() => harness.RunAsync(cts.Token));
