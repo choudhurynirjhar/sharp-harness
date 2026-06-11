@@ -1,6 +1,7 @@
 ﻿using System.Threading.Channels;
 using AgentHarness.Agent;
 using AgentHarness.Evaluation;
+using AgentHarness.Memory;
 using AgentHarness.Messaging;
 using AgentHarness.Ollama;
 using AgentHarness.Tools;
@@ -23,9 +24,19 @@ var ollamaChatService = new OllamaChatService(
     baseUrl,
     model,
     loggerFactory.CreateLogger<OllamaChatService>());
+
+var longTermMemoryStore = new LongTermMemoryStore();
+var shortTermMemory = new ShortTermMemory();
+var memoryConsolidator = new MemoryConsolidator(
+    ollamaChatService,
+    longTermMemoryStore,
+    loggerFactory.CreateLogger<MemoryConsolidator>());
+var agentMemory = new AgentMemory(shortTermMemory, longTermMemoryStore, memoryConsolidator);
+
 var agentLoop = new AgentLoop(
     ollamaChatService,
     toolRegistry,
+    agentMemory,
     loggerFactory.CreateLogger<AgentLoop>());
 
 var channel = Channel.CreateUnbounded<AgentRequest>();
@@ -44,6 +55,7 @@ async Task<string> SendAsync(string userMessage)
 try
 {
     Console.WriteLine("AI Agent Harness is ready.");
+    Console.WriteLine($"Long-term memory file: {longTermMemoryStore.FilePath}");
     Console.WriteLine("Type your prompt and press Enter. Type 'quit' to exit.");
 
     while (true)

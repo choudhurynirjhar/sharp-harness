@@ -97,6 +97,9 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
+## Harness runtime data
+.harness/
+
 ## Secrets / local config
 .env
 .env.*
