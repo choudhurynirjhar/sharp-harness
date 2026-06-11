@@ -8,7 +8,7 @@ using AgentRuntime = AgentHarness.Agent.AgentHarness;
 var baseUrl = Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://localhost:11434";
 var model = Environment.GetEnvironmentVariable("OLLAMA_MODEL") ?? "qwen3.5:9b";
 
-var toolRegistry = new ToolRegistry([new GetCurrentTimeTool()]);
+var toolRegistry = new ToolRegistry([new GetCurrentTimeTool(), new HttpRequestTool()]);
 var ollamaChatService = new OllamaChatService(baseUrl, model);
 var agentLoop = new AgentLoop(ollamaChatService, toolRegistry);
 
