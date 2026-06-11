@@ -18,7 +18,7 @@ using var loggerFactory = LoggerFactory.Create(builder =>
 
 var evaluationLogger = new AgentEvaluationLogger(loggerFactory.CreateLogger<AgentEvaluationLogger>());
 
-var toolRegistry = new ToolRegistry([new GetCurrentTimeTool(), new HttpRequestTool()]);
+var toolRegistry = new ToolRegistry([new GetCurrentTimeTool(), new HttpRequestTool(), new CommandPromptTool()]);
 var ollamaChatService = new OllamaChatService(
     baseUrl,
     model,
